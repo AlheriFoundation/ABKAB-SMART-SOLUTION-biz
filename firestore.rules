@@ -1,0 +1,271 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'abdulwasiukura@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isBusinessOwner(businessId) {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/businesses/$(businessId)) &&
+         get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == request.auth.uid) ||
+        isSuperAdmin()
+      );
+    }
+
+    function isBusinessMember(businessId) {
+      return isSignedIn() && (
+        isBusinessOwner(businessId) ||
+        exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) ||
+        isSuperAdmin()
+      );
+    }
+
+    function isBusinessActive(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)) &&
+        get(/databases/$(database)/documents/businesses/$(businessId)).data.planStatus != 'expired';
+    }
+
+    function getMemberRole(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isManager(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) &&
+        getMemberRole(businessId) == 'manager';
+    }
+
+    function isCashier(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) &&
+        getMemberRole(businessId) == 'cashier';
+    }
+
+    function isAccountant(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) &&
+        getMemberRole(businessId) == 'accountant';
+    }
+
+    function isInventoryClerk(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) &&
+        getMemberRole(businessId) == 'inventory_clerk';
+    }
+
+    // Role-specific operational helper permissions
+    function canManageSales(businessId) {
+      return isBusinessOwner(businessId) || isManager(businessId) || isCashier(businessId);
+    }
+
+    function canManageInventory(businessId) {
+      return isBusinessOwner(businessId) || isManager(businessId) || isInventoryClerk(businessId);
+    }
+
+    function canManageExpenses(businessId) {
+      return isBusinessOwner(businessId) || isManager(businessId) || isAccountant(businessId);
+    }
+
+    function canManageInvoices(businessId) {
+      return isBusinessOwner(businessId) || isManager(businessId) || isAccountant(businessId);
+    }
+
+    // Connectivity verification probe
+    match /test/connection {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Platform Super Admin records - strictly protected against client modification
+    match /admins/{userId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // User personal profile - users cannot elevate their own role to admin
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        (request.resource.data.role != 'admin' || isSuperAdmin());
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
+        isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Core Business Tenants
+    match /businesses/{businessId} {
+      allow create: if isSignedIn() && isValidId(businessId) &&
+        request.resource.data.id == businessId &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() > 0 &&
+        request.resource.data.name.size() <= 150 &&
+        request.resource.data.plan in ['starter', 'growth', 'pro'] &&
+        request.resource.data.planStatus in ['active', 'trial'] &&
+        (request.resource.data.plan == 'starter' || request.resource.data.planStatus == 'trial' || isSuperAdmin());
+
+      allow get: if isSignedIn() && isValidId(businessId) && (
+        resource.data.ownerId == request.auth.uid ||
+        exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) ||
+        isSuperAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        isSuperAdmin()
+      );
+
+      // Server-side Subscription & Identity Guard:
+      // Regular owners cannot arbitrarily change plan, planStatus, or ownerId
+      allow update: if isSignedIn() && isValidId(businessId) && (
+        (
+          resource.data.ownerId == request.auth.uid &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          (
+            (request.resource.data.plan == resource.data.plan &&
+             request.resource.data.planStatus == resource.data.planStatus) ||
+            isSuperAdmin()
+          )
+        ) ||
+        isSuperAdmin()
+      );
+
+      allow delete: if isSignedIn() && isValidId(businessId) && (
+        resource.data.ownerId == request.auth.uid ||
+        isSuperAdmin()
+      );
+
+      // Subcollection: Members
+      match /members/{memberId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if isBusinessOwner(businessId);
+      }
+
+      // Subcollection: Products (Inventory)
+      match /products/{productId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if canManageInventory(businessId) && isValidId(productId) &&
+          request.resource.data.businessId == businessId &&
+          request.resource.data.quantity >= 0 &&
+          request.resource.data.costPrice >= 0 &&
+          request.resource.data.sellingPrice >= 0;
+        allow update: if isValidId(productId) &&
+          request.resource.data.businessId == resource.data.businessId &&
+          request.resource.data.quantity >= 0 && (
+            canManageInventory(businessId) ||
+            (
+              isCashier(businessId) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'updatedAt']) &&
+              request.resource.data.sellingPrice == resource.data.sellingPrice &&
+              request.resource.data.costPrice == resource.data.costPrice &&
+              request.resource.data.name == resource.data.name
+            )
+          );
+        allow delete: if (isBusinessOwner(businessId) || isManager(businessId)) && isValidId(productId);
+      }
+
+      // Subcollection: Sales (Protected against expired subscriptions & unauthorized deletion)
+      match /sales/{saleId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if canManageSales(businessId) && isValidId(saleId) &&
+          isBusinessActive(businessId) &&
+          request.resource.data.businessId == businessId &&
+          request.resource.data.totalAmount >= 0 &&
+          request.resource.data.items is list &&
+          request.resource.data.items.size() > 0 &&
+          request.resource.data.discount >= 0;
+        allow update: if (isBusinessOwner(businessId) || isManager(businessId)) && isValidId(saleId) &&
+          request.resource.data.businessId == resource.data.businessId;
+        // Sales records protected against deletion by Cashiers; only Owner/SuperAdmin can delete
+        allow delete: if isBusinessOwner(businessId) && isValidId(saleId);
+      }
+
+      // Subcollection: Expenses (Overhead costs)
+      match /expenses/{expenseId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if canManageExpenses(businessId) && isValidId(expenseId) &&
+          request.resource.data.businessId == businessId &&
+          request.resource.data.amount > 0;
+        allow update: if canManageExpenses(businessId) && isValidId(expenseId) &&
+          request.resource.data.businessId == resource.data.businessId;
+        allow delete: if isBusinessOwner(businessId) && isValidId(expenseId);
+      }
+
+      // Subcollection: Customers
+      match /customers/{customerId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if (canManageSales(businessId) || isAccountant(businessId)) && isValidId(customerId) &&
+          request.resource.data.businessId == businessId;
+        allow update: if (canManageSales(businessId) || isAccountant(businessId)) && isValidId(customerId) &&
+          request.resource.data.businessId == resource.data.businessId;
+        allow delete: if (isBusinessOwner(businessId) || isManager(businessId)) && isValidId(customerId);
+      }
+
+      // Subcollection: Suppliers
+      match /suppliers/{supplierId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if (canManageInventory(businessId) || isAccountant(businessId)) && isValidId(supplierId) &&
+          request.resource.data.businessId == businessId;
+        allow update: if (canManageInventory(businessId) || isAccountant(businessId)) && isValidId(supplierId) &&
+          request.resource.data.businessId == resource.data.businessId;
+        allow delete: if (isBusinessOwner(businessId) || isManager(businessId)) && isValidId(supplierId);
+      }
+
+      // Subcollection: Invoices (Restricted when subscription expired)
+      match /invoices/{invoiceId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if canManageInvoices(businessId) && isValidId(invoiceId) &&
+          isBusinessActive(businessId) &&
+          request.resource.data.businessId == businessId &&
+          request.resource.data.total >= 0;
+        allow update: if canManageInvoices(businessId) && isValidId(invoiceId) &&
+          request.resource.data.businessId == resource.data.businessId;
+        allow delete: if isBusinessOwner(businessId) && isValidId(invoiceId);
+      }
+
+      // Subcollection: Staff (Owner only access for write)
+      match /staff/{staffId} {
+        allow read: if isBusinessMember(businessId);
+        allow create, update, delete: if isBusinessOwner(businessId) && isValidId(staffId) &&
+          (request.method == 'delete' || request.resource.data.businessId == businessId);
+      }
+
+      // Subcollection: Audit Logs (Immutable audit trail; create only, actor verified, never update or delete)
+      match /audit_logs/{logId} {
+        allow read: if isBusinessMember(businessId);
+        allow create: if isBusinessMember(businessId) && isValidId(logId) &&
+          request.resource.data.businessId == businessId &&
+          request.resource.data.performedById == request.auth.uid &&
+          request.resource.data.action is string &&
+          request.resource.data.action in [
+            'sale_created', 'sale_refunded', 'stock_adjusted',
+            'product_added', 'staff_modified', 'business_updated',
+            'subscription_changed'
+          ] &&
+          (
+            !(request.resource.data.action in ['staff_modified', 'business_updated', 'subscription_changed']) ||
+            isBusinessOwner(businessId)
+          );
+        allow update, delete: if false;
+      }
+    }
+  }
+}

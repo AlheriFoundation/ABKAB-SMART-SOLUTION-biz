@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #10294B;
+  --color-navy-dark: #0a1a30;
+  --color-navy-light: #1b3e70;
+  --color-gold: #D8B45A;
+  --color-gold-hover: #c49f45;
+  --color-gold-light: #faf4e6;
+  --color-app-bg: #F7F9FC;
+  --color-app-text: #1E293B;
+}
+
+:root {
+  --bg-primary: #10294B;
+  --accent-gold: #D8B45A;
+  --app-bg: #F7F9FC;
+}
+
+body {
+  background-color: #F7F9FC;
+  color: #1E293B;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print styling for professional receipts and invoices */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt,
+  #printable-receipt *,
+  #printable-invoice,
+  #printable-invoice * {
+    visibility: visible;
+  }
+  #printable-receipt,
+  #printable-invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: white;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

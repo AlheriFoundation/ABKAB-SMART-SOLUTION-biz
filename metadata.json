@@ -1,0 +1,6 @@
+{
+  "name": "ABKAB BizManager",
+  "description": "Premium business management SaaS for Nigerian SMBs by ABKAB Smart Solution. Excellence in Every Service.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
