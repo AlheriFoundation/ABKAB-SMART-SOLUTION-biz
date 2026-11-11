@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, ShoppingCart, AlertCircle, Check } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  ShoppingCart,
+  AlertCircle,
+  Check,
+  Landmark,
+  CreditCard,
+  Banknote,
+  Split,
+  Copy,
+  CheckCheck,
+} from 'lucide-react';
 import { useBusinessData } from '../../context/BusinessDataContext';
 import { useAuth } from '../../context/AuthContext';
 import { SaleItem } from '../../types';
@@ -21,8 +34,14 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose, onS
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [discount, setDiscount] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'pos' | 'credit'>('transfer');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'pos' | 'credit' | 'split'>('transfer');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'partial' | 'pending'>('paid');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [tenderedAmount, setTenderedAmount] = useState<string>('');
+  const [splitCash, setSplitCash] = useState<string>('');
+  const [splitTransfer, setSplitTransfer] = useState<string>('');
+  const [splitPos, setSplitPos] = useState<string>('');
+  const [copiedBank, setCopiedBank] = useState(false);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +104,18 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose, onS
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const totalAmount = Math.max(0, subtotal - discount);
 
+  const numTendered = parseFloat(tenderedAmount) || 0;
+  const changeDue = paymentMethod === 'cash' && numTendered > totalAmount ? numTendered - totalAmount : 0;
+  const splitSum = (parseFloat(splitCash) || 0) + (parseFloat(splitTransfer) || 0) + (parseFloat(splitPos) || 0);
+
+  const handleCopyBank = () => {
+    if (!activeBusiness?.bankAccountNumber) return;
+    const txt = `${activeBusiness.bankName || 'GTBank'}\nAcc: ${activeBusiness.bankAccountNumber}\nName: ${activeBusiness.bankAccountName || activeBusiness.name}`;
+    navigator.clipboard.writeText(txt);
+    setCopiedBank(true);
+    setTimeout(() => setCopiedBank(false), 2000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -99,8 +130,31 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose, onS
       return;
     }
 
+    // Validation for split payment
+    if (paymentMethod === 'split') {
+      if (Math.abs(splitSum - totalAmount) > 0.01) {
+        setError(`Split payments sum to ₦${splitSum.toLocaleString()}, which does not match the Total Amount of ₦${totalAmount.toLocaleString()}. Please adjust your cash, transfer, or POS portions.`);
+        return;
+      }
+    }
+
+    // Validation for cash payments with tender entered
+    if (paymentMethod === 'cash' && numTendered > 0 && numTendered < totalAmount) {
+      setError(`Amount tendered (₦${numTendered.toLocaleString()}) is less than total amount (₦${totalAmount.toLocaleString()}). Select Partial payment status or adjust tendered amount.`);
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const splitBreakdown =
+        paymentMethod === 'split'
+          ? [
+              { method: 'cash' as const, amount: parseFloat(splitCash) || 0 },
+              { method: 'transfer' as const, amount: parseFloat(splitTransfer) || 0 },
+              { method: 'pos' as const, amount: parseFloat(splitPos) || 0 },
+            ].filter((s) => s.amount > 0)
+          : undefined;
+
       const newSale = await addSale({
         customerId: selectedCustomerId || undefined,
         customerName: customerName.trim() || 'Walk-in Customer',
@@ -109,6 +163,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose, onS
         discount: Number(discount) || 0,
         paymentMethod,
         paymentStatus,
+        paymentReference: paymentReference.trim() || undefined,
+        tenderedAmount: paymentMethod === 'cash' && numTendered > 0 ? numTendered : undefined,
+        changeDue: paymentMethod === 'cash' && changeDue > 0 ? changeDue : undefined,
+        splitBreakdown,
         notes: notes.trim() || undefined,
         recordedBy: userProfile?.displayName || 'Cashier',
       });
@@ -284,55 +342,277 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose, onS
             )}
           </div>
 
-          {/* Payment & Totals */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+          {/* Enhanced Payment Methods Selector & Processing */}
+          <div className="pt-2 border-t border-slate-200 space-y-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Method</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
-              >
-                <option value="transfer">Bank Transfer (Instant / NIP)</option>
-                <option value="cash">Cash Payment</option>
-                <option value="pos">POS Terminal (Debit Card)</option>
-                <option value="credit">Credit / Customer Account</option>
-              </select>
-            </div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                <span>Select Payment Method</span>
+                <span className="text-[11px] font-normal text-slate-500">
+                  {paymentMethod === 'transfer' && 'Instant NIP Bank Transfer'}
+                  {paymentMethod === 'cash' && 'Cash with Change Calculator'}
+                  {paymentMethod === 'pos' && 'Card Swipe / POS Terminal'}
+                  {paymentMethod === 'split' && 'Multi-Method / Split Bill'}
+                  {paymentMethod === 'credit' && 'Post to Customer Ledger'}
+                </span>
+              </label>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Status</label>
-              <select
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value as any)}
-                className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
-              >
-                <option value="paid">Paid in Full</option>
-                <option value="partial">Partially Paid</option>
-                <option value="pending">Pending / On Credit</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Discount (₦)</label>
-              <input
-                type="number"
-                min={0}
-                value={discount}
-                onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
-                placeholder="0.00"
-              />
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col justify-center">
-              <div className="flex justify-between text-xs text-slate-500 mb-1">
-                <span>Subtotal:</span>
-                <span>{formatNaira(subtotal)}</span>
+              {/* Method Selection Tabs */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                {[
+                  { id: 'transfer', label: 'Transfer', icon: Landmark, color: 'text-blue-600' },
+                  { id: 'cash', label: 'Cash', icon: Banknote, color: 'text-emerald-600' },
+                  { id: 'pos', label: 'POS Terminal', icon: CreditCard, color: 'text-purple-600' },
+                  { id: 'split', label: 'Split / Mixed', icon: Split, color: 'text-amber-600' },
+                  { id: 'credit', label: 'Credit', icon: ShoppingCart, color: 'text-rose-600' },
+                ].map((m) => {
+                  const Icon = m.icon;
+                  const isSelected = paymentMethod === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(m.id as any)}
+                      className={`p-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center space-y-1 transition border ${
+                        isSelected
+                          ? 'bg-[#10294B] text-white border-[#10294B] shadow-sm'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Icon size={16} className={isSelected ? 'text-[#D8B45A]' : m.color} />
+                      <span className="text-[11px] truncate">{m.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-              <div className="flex justify-between text-sm font-extrabold text-[#10294B]">
-                <span>Total Amount:</span>
-                <span className="text-emerald-700">{formatNaira(totalAmount)}</span>
+            </div>
+
+            {/* Dynamic Method Details Panel */}
+            {paymentMethod === 'transfer' && (
+              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-[#10294B] block">Business Bank Details for Transfer:</span>
+                    <p className="text-[11px] text-slate-700 mt-0.5">
+                      <span className="font-semibold">{activeBusiness?.bankName || 'Guaranty Trust Bank (GTBank)'}</span> •{' '}
+                      Acc: <span className="font-mono font-bold">{activeBusiness?.bankAccountNumber || '0123456789'}</span> •{' '}
+                      <span>{activeBusiness?.bankAccountName || activeBusiness?.name}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyBank}
+                    className="px-2.5 py-1 rounded-lg bg-[#10294B] hover:bg-[#15345d] text-white text-[10px] font-bold flex items-center space-x-1 shrink-0 transition"
+                  >
+                    {copiedBank ? <CheckCheck size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                    <span>{copiedBank ? 'Copied' : 'Copy Acc'}</span>
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    NIP Transfer Session ID / Bank Reference (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder="e.g. NIP-090283019 or GTB Reference"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
+                  />
+                </div>
+              </div>
+            )}
+
+            {paymentMethod === 'cash' && (
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-900">Cash Payment & Change Calculator</span>
+                  {changeDue > 0 && (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-bold text-xs">
+                      Change Due: {formatNaira(changeDue)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Cash Given by Customer (₦)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={tenderedAmount}
+                      onChange={(e) => setTenderedAmount(e.target.value)}
+                      placeholder={`e.g. ${totalAmount}`}
+                      className="w-full px-3 py-1.5 text-xs font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Quick Denominations
+                    </label>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setTenderedAmount(totalAmount.toString())}
+                        className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700"
+                      >
+                        Exact (₦{totalAmount.toLocaleString()})
+                      </button>
+                      {[1000, 5000, 10000].map((add) => (
+                        <button
+                          key={add}
+                          type="button"
+                          onClick={() => setTenderedAmount((Math.ceil(totalAmount / add) * add || add).toString())}
+                          className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-medium text-slate-700"
+                        >
+                          ₦{(Math.ceil(totalAmount / add) * add || add).toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {numTendered > 0 && numTendered < totalAmount && (
+                  <p className="text-[11px] font-bold text-rose-600">
+                    Remaining balance: {formatNaira(totalAmount - numTendered)}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {paymentMethod === 'pos' && (
+              <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-purple-900">
+                    POS Terminal: {activeBusiness?.posProvider || 'Moniepoint / OPay'}
+                  </span>
+                  <span className="text-[11px] text-purple-700 font-medium">Card Swipe / Contactless</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    POS RRN / Approval Code / Slip #
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder="e.g. RRN-948201928 / STAN-00129"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
+                  />
+                </div>
+              </div>
+            )}
+
+            {paymentMethod === 'split' && (
+              <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+                  <span>Split Payment Breakdown</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] ${
+                      Math.abs(splitSum - totalAmount) < 0.01
+                        ? 'bg-emerald-600 text-white font-bold'
+                        : 'bg-amber-200 text-amber-900'
+                    }`}
+                  >
+                    Allocated: {formatNaira(splitSum)} / {formatNaira(totalAmount)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">Cash Portion (₦)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={splitCash}
+                      onChange={(e) => setSplitCash(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">Bank Transfer (₦)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={splitTransfer}
+                      onChange={(e) => setSplitTransfer(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">POS Card (₦)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={splitPos}
+                      onChange={(e) => setSplitPos(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white"
+                    />
+                  </div>
+                </div>
+
+                {Math.abs(splitSum - totalAmount) > 0.01 && (
+                  <p className="text-[10px] text-amber-800 font-medium">
+                    {splitSum < totalAmount
+                      ? `₦${(totalAmount - splitSum).toLocaleString()} remaining to be allocated.`
+                      : `₦${(splitSum - totalAmount).toLocaleString()} over allocated.`}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {paymentMethod === 'credit' && (
+              <div className="p-3.5 rounded-xl bg-rose-50/70 border border-rose-200 text-xs text-rose-900 space-y-1">
+                <p className="font-bold">Customer Ledger / Credit Sale</p>
+                <p className="text-[11px] text-slate-700">
+                  This transaction will be recorded on credit and added to the customer's outstanding balance. Ensure a registered customer is selected above.
+                </p>
+              </div>
+            )}
+
+            {/* Status, Discount & Total Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Status</label>
+                <select
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
+                >
+                  <option value="paid">Paid in Full</option>
+                  <option value="partial">Partially Paid</option>
+                  <option value="pending">Pending / On Credit</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Discount (₦)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={discount}
+                  onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex flex-col justify-center">
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span>Subtotal:</span>
+                  <span>{formatNaira(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-extrabold text-[#10294B] mt-0.5">
+                  <span>Total Amount:</span>
+                  <span className="text-emerald-700">{formatNaira(totalAmount)}</span>
+                </div>
               </div>
             </div>
           </div>

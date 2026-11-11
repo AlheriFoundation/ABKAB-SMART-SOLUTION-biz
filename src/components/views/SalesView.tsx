@@ -98,31 +98,41 @@ export const SalesView: React.FC<SalesViewProps> = ({ openQuickSaleModal, onView
       </div>
 
       {/* Summary KPI Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Filtered Total Revenue</p>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Filtered Revenue</p>
           <p className="text-xl font-bold text-slate-900 mt-1">{formatNaira(totalFilteredAmount)}</p>
-          <p className="text-[11px] text-slate-400 mt-1">{filteredSales.length} of {sales.length} records</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">{filteredSales.length} of {sales.length} transactions</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Bank Transfer Sales</p>
+          <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wide">Bank Transfers (NIP)</p>
           <p className="text-xl font-bold text-[#10294B] mt-1">
             {formatNaira(
-              sales.filter((s) => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.totalAmount, 0)
+              sales.filter((s) => s.paymentMethod === 'transfer' && s.status !== 'refunded').reduce((sum, s) => sum + s.totalAmount, 0)
             )}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Instant NIP Transfers</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Instant account deposits</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Cash & POS Sales</p>
+          <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">Cash Inflow</p>
           <p className="text-xl font-bold text-emerald-700 mt-1">
             {formatNaira(
-              sales.filter((s) => s.paymentMethod === 'cash' || s.paymentMethod === 'pos').reduce((sum, s) => sum + s.totalAmount, 0)
+              sales.filter((s) => s.paymentMethod === 'cash' && s.status !== 'refunded').reduce((sum, s) => sum + s.totalAmount, 0)
             )}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Direct store payments</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Physical store cash drawer</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <p className="text-[11px] font-bold text-purple-700 uppercase tracking-wide">POS & Split Payments</p>
+          <p className="text-xl font-bold text-purple-900 mt-1">
+            {formatNaira(
+              sales.filter((s) => (s.paymentMethod === 'pos' || s.paymentMethod === 'split') && s.status !== 'refunded').reduce((sum, s) => sum + s.totalAmount, 0)
+            )}
+          </p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Card swipes & split bills</p>
         </div>
       </div>
 
@@ -132,7 +142,7 @@ export const SalesView: React.FC<SalesViewProps> = ({ openQuickSaleModal, onView
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
             type="text"
-            placeholder="Search receipt #, customer, product..."
+            placeholder="Search receipt #, customer, product, ref..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
@@ -146,10 +156,11 @@ export const SalesView: React.FC<SalesViewProps> = ({ openQuickSaleModal, onView
             className="px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-700 flex-1 md:flex-initial"
           >
             <option value="all">All Payment Methods</option>
-            <option value="transfer">Bank Transfer</option>
+            <option value="transfer">Bank Transfer (NIP)</option>
             <option value="cash">Cash</option>
             <option value="pos">POS Terminal</option>
-            <option value="credit">Credit</option>
+            <option value="split">Split / Mixed</option>
+            <option value="credit">Credit Ledger</option>
           </select>
 
           <select
@@ -205,9 +216,34 @@ export const SalesView: React.FC<SalesViewProps> = ({ openQuickSaleModal, onView
                       {sale.items.map((i) => `${i.productName} (x${i.quantity})`).join(', ')}
                     </td>
                     <td className="p-3.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-100 text-slate-700">
-                        {sale.paymentMethod}
-                      </span>
+                      <div className="flex flex-col space-y-0.5">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit ${
+                            sale.paymentMethod === 'transfer'
+                              ? 'bg-blue-100 text-blue-800'
+                              : sale.paymentMethod === 'cash'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : sale.paymentMethod === 'pos'
+                              ? 'bg-purple-100 text-purple-800'
+                              : sale.paymentMethod === 'split'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          {sale.paymentMethod === 'transfer'
+                            ? 'Transfer'
+                            : sale.paymentMethod === 'pos'
+                            ? 'POS'
+                            : sale.paymentMethod === 'split'
+                            ? 'Split'
+                            : sale.paymentMethod}
+                        </span>
+                        {sale.paymentReference && (
+                          <span className="text-[9px] text-slate-400 font-mono truncate max-w-[110px]" title={sale.paymentReference}>
+                            {sale.paymentReference}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3.5">
                       <div className="flex flex-col space-y-1">

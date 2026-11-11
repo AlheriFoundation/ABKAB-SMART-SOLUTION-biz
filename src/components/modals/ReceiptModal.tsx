@@ -19,6 +19,25 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
   };
 
   const copyReceiptText = () => {
+    let paymentDetail = `PAYMENT: ${sale.paymentMethod.toUpperCase()} (${sale.paymentStatus.toUpperCase()})`;
+    if (sale.paymentReference) {
+      paymentDetail += `\nREF / SESSION ID: ${sale.paymentReference}`;
+    }
+    if (sale.tenderedAmount) {
+      paymentDetail += `\nTENDERED: ${formatNaira(sale.tenderedAmount)} | CHANGE: ${formatNaira(sale.changeDue || 0)}`;
+    }
+    if (sale.splitBreakdown && sale.splitBreakdown.length > 0) {
+      paymentDetail += `\nSPLIT: ${sale.splitBreakdown.map((s) => `${s.method.toUpperCase()}: ${formatNaira(s.amount)}`).join(' + ')}`;
+    }
+
+    const bankDetails = activeBusiness?.bankAccountNumber
+      ? `--------------------------------------
+OFFICIAL BANK TRANSFER DETAILS:
+Bank: ${activeBusiness.bankName || 'GTBank'}
+Account Number: ${activeBusiness.bankAccountNumber}
+Account Name: ${activeBusiness.bankAccountName || activeBusiness.name}`
+      : '';
+
     const text = `
 --------------------------------------
 ${activeBusiness?.name || 'ABKAB BizManager'}
@@ -30,7 +49,7 @@ CAC: ${activeBusiness?.cacNumber || 'N/A'}
 RECEIPT: ${sale.receiptNumber}
 DATE: ${formatDateTime(sale.createdAt)}
 CUSTOMER: ${sale.customerName}
-PAYMENT: ${sale.paymentMethod.toUpperCase()} (${sale.paymentStatus.toUpperCase()})
+${paymentDetail}
 CASHIER: ${sale.recordedBy}
 --------------------------------------
 ITEMS:
@@ -39,13 +58,14 @@ ${sale.items.map((i) => `${i.productName} x${i.quantity} @ ${formatNaira(i.unitP
 SUBTOTAL: ${formatNaira(sale.totalAmount + (sale.discount || 0))}
 DISCOUNT: -${formatNaira(sale.discount || 0)}
 TOTAL PAID: ${formatNaira(sale.totalAmount)}
+${bankDetails}
 --------------------------------------
 ${activeBusiness?.receiptFooter || 'Thank you for your business!'}
-Powered by ABKAB BizManager
+Powered by ABKAB BizManager • ABKAB Smart Solution
     `.trim();
 
     navigator.clipboard.writeText(text);
-    alert('Receipt text copied to clipboard!');
+    alert('Receipt summary copied to clipboard!');
   };
 
   return (
@@ -116,8 +136,51 @@ Powered by ABKAB BizManager
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Payment Mode:</span>
-              <span className="font-semibold uppercase text-emerald-700">{sale.paymentMethod}</span>
+              <span className="font-semibold uppercase text-emerald-700">
+                {sale.paymentMethod === 'transfer'
+                  ? 'Bank Transfer'
+                  : sale.paymentMethod === 'pos'
+                  ? 'POS Terminal'
+                  : sale.paymentMethod === 'split'
+                  ? 'Split Payment'
+                  : sale.paymentMethod === 'credit'
+                  ? 'Credit Account'
+                  : 'Cash'}
+              </span>
             </div>
+            {sale.paymentReference && (
+              <div className="flex justify-between text-[10px] text-slate-600">
+                <span>Ref / Session ID:</span>
+                <span className="font-mono">{sale.paymentReference}</span>
+              </div>
+            )}
+            {sale.paymentMethod === 'cash' && sale.tenderedAmount && (
+              <>
+                <div className="flex justify-between text-[10px] text-slate-600">
+                  <span>Cash Tendered:</span>
+                  <span>{formatNaira(sale.tenderedAmount)}</span>
+                </div>
+                {sale.changeDue !== undefined && sale.changeDue > 0 && (
+                  <div className="flex justify-between text-[10px] text-emerald-700 font-bold">
+                    <span>Change Returned:</span>
+                    <span>{formatNaira(sale.changeDue)}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {sale.paymentMethod === 'split' && sale.splitBreakdown && sale.splitBreakdown.length > 0 && (
+              <div className="pt-1 text-[10px] text-slate-600 border-t border-slate-100">
+                <span className="block font-semibold text-slate-700 mb-0.5">Split Breakdown:</span>
+                <div className="space-y-0.5 pl-2">
+                  {sale.splitBreakdown.map((s, idx) => (
+                    <div key={idx} className="flex justify-between">
+                      <span className="capitalize">{s.method}:</span>
+                      <span>{formatNaira(s.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-slate-500">Cashier:</span>
               <span>{sale.recordedBy || 'Sales Rep'}</span>
@@ -146,7 +209,7 @@ Powered by ABKAB BizManager
           </div>
 
           {/* Financial summary */}
-          <div className="space-y-1.5 mb-5 text-[11px]">
+          <div className="space-y-1.5 mb-4 text-[11px]">
             <div className="flex justify-between text-slate-600">
               <span>Subtotal:</span>
               <span>{formatNaira(sale.totalAmount + (sale.discount || 0))}</span>
@@ -162,6 +225,17 @@ Powered by ABKAB BizManager
               <span>{formatNaira(sale.totalAmount)}</span>
             </div>
           </div>
+
+          {/* Official Business Bank Remittance Box */}
+          {activeBusiness?.bankAccountNumber && (
+            <div className="my-3 p-2.5 border border-slate-300 rounded-lg text-center text-[10px] font-sans bg-slate-50 space-y-0.5">
+              <p className="font-bold text-[#10294B] uppercase tracking-wide">Official Bank Transfer Details</p>
+              <p className="text-slate-800 font-semibold">
+                {activeBusiness.bankName || 'GTBank'} • Acc: <span className="font-mono font-bold">{activeBusiness.bankAccountNumber}</span>
+              </p>
+              <p className="text-slate-600 text-[9px] uppercase">{activeBusiness.bankAccountName || activeBusiness.name}</p>
+            </div>
+          )}
 
           {/* Barcode graphic & footer */}
           <div className="text-center pt-3 border-t border-dashed border-slate-300">

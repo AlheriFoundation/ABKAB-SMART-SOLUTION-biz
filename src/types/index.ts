@@ -14,6 +14,14 @@ export interface Business {
   plan: 'starter' | 'growth' | 'pro';
   planStatus: 'active' | 'trial' | 'expired';
   receiptFooter?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
+  secondaryBankName?: string;
+  secondaryAccountNumber?: string;
+  secondaryAccountName?: string;
+  posProvider?: string;
+  acceptedPaymentMethods?: string[];
   createdAt: string;
   updatedAt?: string;
 }
@@ -61,7 +69,15 @@ export interface Sale {
   subtotal?: number;
   totalAmount: number;
   discount: number;
-  paymentMethod: 'cash' | 'transfer' | 'pos' | 'credit';
+  paymentMethod: 'cash' | 'transfer' | 'pos' | 'credit' | 'split';
+  paymentReference?: string; // NIP transfer session ID, POS terminal RRN or slip code
+  tenderedAmount?: number; // Cash given by customer
+  changeDue?: number; // Change returned to customer
+  splitBreakdown?: {
+    method: 'cash' | 'transfer' | 'pos' | 'credit';
+    amount: number;
+    reference?: string;
+  }[];
   paymentStatus: 'paid' | 'partial' | 'pending';
   status?: 'completed' | 'refunded' | 'void';
   refundReason?: string;

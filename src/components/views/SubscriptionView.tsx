@@ -297,7 +297,39 @@ export const SubscriptionView: React.FC = () => {
                 </p>
               </div>
 
-              <div className="space-y-1.5 text-xs">
+              {/* Supported Nigerian Payment Gateways */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                  Supported Payment Channels (Nigeria):
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/60 flex items-center space-x-2">
+                    <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                      P
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-[11px]">Paystack</p>
+                      <p className="text-[9px] text-slate-500">Cards, Apple Pay, Transfer</p>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/60 flex items-center space-x-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold text-[10px]">
+                      F
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-[11px]">Flutterwave</p>
+                      <p className="text-[9px] text-slate-500">Bank Transfer, USSD, Cards</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 text-[11px] text-slate-600">
+                  <span className="font-semibold text-slate-800">Corporate Wire Transfer:</span> Transfer directly to ABKAB Smart Solution Ltd corporate account. Contact support for instant activation.
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-xs pt-1 border-t border-slate-100">
                 <div className="flex justify-between text-slate-600">
                   <span>Selected Tier:</span>
                   <span className="font-bold text-slate-900">{selectedPlan.name}</span>

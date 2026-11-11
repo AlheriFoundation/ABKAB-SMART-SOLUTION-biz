@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Building2, User, Check, AlertCircle, Plus, Shield } from 'lucide-react';
+import { Settings, Building2, User, Check, AlertCircle, Plus, Shield, Landmark, CreditCard, Copy, Smartphone, Wallet, ArrowUpRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useBusinessData } from '../../context/BusinessDataContext';
 import { NIGERIAN_STATES } from '../../utils/formatters';
+import { NIGERIAN_BANKS, POS_PROVIDERS, validateNuban } from '../../utils/paymentMethods';
 
 interface SettingsViewProps {
   openNewBusinessModal: () => void;
@@ -22,6 +23,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ openNewBusinessModal
   const [city, setCity] = useState('');
   const [state, setState] = useState('Lagos');
   const [receiptFooter, setReceiptFooter] = useState('');
+
+  // Payment Methods & Bank Account states
+  const [bankName, setBankName] = useState('Guaranty Trust Bank (GTBank)');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [secondaryBankName, setSecondaryBankName] = useState('');
+  const [secondaryAccountNumber, setSecondaryAccountNumber] = useState('');
+  const [secondaryAccountName, setSecondaryAccountName] = useState('');
+  const [posProvider, setPosProvider] = useState('Moniepoint POS');
+  const [acceptedPaymentMethods, setAcceptedPaymentMethods] = useState<string[]>([
+    'cash',
+    'transfer',
+    'pos',
+    'credit',
+    'split',
+  ]);
+  const [copiedBank, setCopiedBank] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -37,8 +55,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ openNewBusinessModal
       setCity(activeBusiness.city || '');
       setState(activeBusiness.state || 'Lagos');
       setReceiptFooter(activeBusiness.receiptFooter || '');
+
+      setBankName(activeBusiness.bankName || 'Guaranty Trust Bank (GTBank)');
+      setBankAccountNumber(activeBusiness.bankAccountNumber || '');
+      setBankAccountName(activeBusiness.bankAccountName || activeBusiness.name || '');
+      setSecondaryBankName(activeBusiness.secondaryBankName || '');
+      setSecondaryAccountNumber(activeBusiness.secondaryAccountNumber || '');
+      setSecondaryAccountName(activeBusiness.secondaryAccountName || '');
+      setPosProvider(activeBusiness.posProvider || 'Moniepoint POS');
+      if (activeBusiness.acceptedPaymentMethods && activeBusiness.acceptedPaymentMethods.length > 0) {
+        setAcceptedPaymentMethods(activeBusiness.acceptedPaymentMethods);
+      }
     }
   }, [activeBusiness]);
+
+  const handleTogglePaymentMethod = (method: string) => {
+    setAcceptedPaymentMethods((prev) =>
+      prev.includes(method) ? prev.filter((m) => m !== method) : [...prev, method]
+    );
+  };
+
+  const handleCopyBankInfo = () => {
+    if (!bankAccountNumber) return;
+    const info = `${bankName}\nAccount Number: ${bankAccountNumber}\nAccount Name: ${bankAccountName || name}`;
+    navigator.clipboard.writeText(info);
+    setCopiedBank(true);
+    setTimeout(() => setCopiedBank(false), 2500);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +98,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ openNewBusinessModal
         city,
         state,
         receiptFooter,
+        bankName,
+        bankAccountNumber: bankAccountNumber.trim(),
+        bankAccountName: bankAccountName.trim(),
+        secondaryBankName: secondaryBankName || undefined,
+        secondaryAccountNumber: secondaryAccountNumber.trim() || undefined,
+        secondaryAccountName: secondaryAccountName.trim() || undefined,
+        posProvider,
+        acceptedPaymentMethods,
       });
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3500);
@@ -271,6 +322,236 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ openNewBusinessModal
               className="px-6 py-2.5 bg-[#10294B] hover:bg-[#15345d] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Payment Methods & Business Bank Accounts Configuration Card */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+              <Landmark size={18} className="text-[#10294B]" />
+              <span>Payment Methods & Bank Accounts</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Configure official Nigerian bank accounts for NIP transfers, POS terminals, and accepted customer payment methods.
+            </p>
+          </div>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#faf4e6] text-[#10294B] border border-[#e8d298]">
+            <Wallet size={12} className="mr-1 text-[#D8B45A]" />
+            NIP Instant Transfers & POS
+          </span>
+        </div>
+
+        <form onSubmit={handleSave} className="p-6 space-y-6">
+          {/* Primary Bank Account */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <Landmark size={16} className="text-[#10294B]" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Primary Corporate Bank Account (NUBAN)
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#10294B] text-white self-start sm:self-auto">
+                Printed on Invoices & Receipts
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Bank Name <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
+                >
+                  {NIGERIAN_BANKS.map((b) => (
+                    <option key={b.name} value={b.name}>
+                      {b.name} ({b.category})
+                    </option>
+                  ))}
+                  <option value="Other Bank">Other Nigerian Bank / FinTech</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  10-Digit NUBAN Account Number <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  placeholder="e.g. 0123456789"
+                  value={bankAccountNumber}
+                  onChange={(e) => setBankAccountNumber(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-2 text-xs font-mono font-bold tracking-widest border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
+                />
+                {bankAccountNumber && !validateNuban(bankAccountNumber) && (
+                  <p className="text-[10px] text-rose-600 mt-1">NUBAN must be exactly 10 digits</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Beneficiary / Account Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. ABKAB SMART SOLUTION ENTERPRISE"
+                  value={bankAccountName}
+                  onChange={(e) => setBankAccountName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-semibold uppercase border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Secondary / FinTech Account (Moniepoint / OPay / Kuda) */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+            <div className="flex items-center space-x-2">
+              <Smartphone size={16} className="text-[#D8B45A]" />
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                Secondary / FinTech Account (Optional Alternative)
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Secondary Bank</label>
+                <select
+                  value={secondaryBankName}
+                  onChange={(e) => setSecondaryBankName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900"
+                >
+                  <option value="">-- No Secondary Account --</option>
+                  {NIGERIAN_BANKS.map((b) => (
+                    <option key={b.name} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Account Number</label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  placeholder="Optional 10-digit number"
+                  value={secondaryAccountNumber}
+                  onChange={(e) => setSecondaryAccountNumber(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Account Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ABKAB Kiosk OPAY"
+                  value={secondaryAccountName}
+                  onChange={(e) => setSecondaryAccountName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs uppercase border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] text-slate-900"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* POS Terminal & Accepted Payment Methods */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center space-x-2">
+                <CreditCard size={16} className="text-[#10294B]" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Default POS Terminal Hardware
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Primary card terminal provider used at cashier checkout points.
+              </p>
+              <select
+                value={posProvider}
+                onChange={(e) => setPosProvider(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10294B] bg-white text-slate-900 font-medium"
+              >
+                {POS_PROVIDERS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center space-x-2">
+                <Wallet size={16} className="text-emerald-700" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Enabled Payment Methods
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { id: 'cash', label: 'Cash Payment' },
+                  { id: 'transfer', label: 'Bank Transfer (NIP)' },
+                  { id: 'pos', label: 'POS Terminal' },
+                  { id: 'credit', label: 'Customer Credit' },
+                  { id: 'split', label: 'Split / Mixed Payment' },
+                ].map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex items-center space-x-2 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={acceptedPaymentMethods.includes(m.id)}
+                      onChange={() => handleTogglePaymentMethod(m.id)}
+                      className="rounded text-[#10294B] focus:ring-[#10294B]"
+                    />
+                    <span className="text-[11px] font-medium text-slate-800">{m.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Live Receipt & Invoice Remittance Preview Card */}
+          {bankAccountNumber && (
+            <div className="p-4 rounded-2xl bg-[#faf4e6] border border-[#ecd497] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#10294B]">
+              <div className="space-y-0.5">
+                <p className="font-bold text-xs flex items-center space-x-1.5">
+                  <Check size={14} className="text-emerald-600" />
+                  <span>Customer Remittance Banner (Printed on Invoices & Receipts)</span>
+                </p>
+                <p className="text-[11px] text-slate-700">
+                  <span className="font-semibold">Bank:</span> {bankName} •{' '}
+                  <span className="font-semibold">Account No:</span>{' '}
+                  <span className="font-mono font-bold">{bankAccountNumber}</span> •{' '}
+                  <span className="font-semibold">Account Name:</span> {bankAccountName || name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyBankInfo}
+                className="px-3 py-1.5 rounded-lg bg-[#10294B] hover:bg-[#15345d] text-white text-[11px] font-bold flex items-center space-x-1.5 self-start sm:self-auto transition shadow-xs shrink-0"
+              >
+                {copiedBank ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                <span>{copiedBank ? 'Copied!' : 'Copy Bank Details'}</span>
+              </button>
+            </div>
+          )}
+
+          <div className="pt-3 border-t border-slate-200 flex justify-end">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-6 py-2.5 bg-[#10294B] hover:bg-[#15345d] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Payment & Banking Settings'}
             </button>
           </div>
         </form>

@@ -37,8 +37,9 @@ interface SecureCheckoutData {
 /**
  * 1. SECURE CHECKOUT (Callable Function)
  * Enforces server-side product pricing, stock availability, and duplicate prevention.
+ * Explicitly deployed to europe-west2 to match project regional configuration.
  */
-export const secureCheckout = functions.https.onCall(async (data: SecureCheckoutData, context) => {
+export const secureCheckout = functions.region('europe-west2').https.onCall(async (data: SecureCheckoutData, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated to execute checkout.');
   }
@@ -185,7 +186,7 @@ export const secureCheckout = functions.https.onCall(async (data: SecureCheckout
  * 2. AUTHORIZE REFUND (Callable Function)
  * Verifies role authority (Owner/Manager), updates transaction to 'refunded', and restores inventory.
  */
-export const authorizeRefund = functions.https.onCall(async (data: { businessId: string; saleId: string; reason: string }, context) => {
+export const authorizeRefund = functions.region('europe-west2').https.onCall(async (data: { businessId: string; saleId: string; reason: string }, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
   }
@@ -272,7 +273,7 @@ export const authorizeRefund = functions.https.onCall(async (data: { businessId:
  * 3. PAYSTACK / FLUTTERWAVE PAYMENT WEBHOOK (HTTPS Endpoint)
  * Validates cryptographic HMAC signature to activate SaaS subscriptions securely.
  */
-export const paystackWebhook = functions.https.onRequest(async (req, res) => {
+export const paystackWebhook = functions.region('europe-west2').https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;

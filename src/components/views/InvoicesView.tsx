@@ -38,7 +38,9 @@ export const InvoicesView: React.FC = () => {
   const [applyVat, setApplyVat] = useState(true);
   const [discount, setDiscount] = useState<number>(0);
   const [notes, setNotes] = useState(
-    'Payment details: Sterling Bank - 0089201928. Goods remain property of seller until paid in full.'
+    activeBusiness?.bankAccountNumber
+      ? `Payment via Bank Transfer to ${activeBusiness.bankName || 'GTBank'} - Acc: ${activeBusiness.bankAccountNumber} (${activeBusiness.bankAccountName || activeBusiness.name}). Goods remain property of seller until paid in full.`
+      : 'Payment via Bank Transfer. Goods remain property of seller until paid in full.'
   );
 
   const [items, setItems] = useState<InvoiceItem[]>([
@@ -666,13 +668,31 @@ export const InvoicesView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Notes & Bank Details */}
-              {viewingInvoice.notes && (
-                <div className="pt-4 border-t border-slate-200 text-xs text-slate-600">
-                  <p className="font-bold text-slate-800 mb-1">Payment Instructions:</p>
-                  <p className="whitespace-pre-line">{viewingInvoice.notes}</p>
-                </div>
-              )}
+              {/* Official Bank Details & Payment Instructions */}
+              <div className="pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                {activeBusiness?.bankAccountNumber && (
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <p className="font-bold text-[#10294B] uppercase tracking-wider text-[10px]">
+                      Official Bank Transfer Remittance
+                    </p>
+                    <p className="text-slate-800 font-semibold">
+                      Bank: <span className="font-bold">{activeBusiness.bankName || 'GTBank'}</span>
+                    </p>
+                    <p className="text-slate-800 font-mono font-bold">
+                      Account No: {activeBusiness.bankAccountNumber}
+                    </p>
+                    <p className="text-slate-600 text-[11px] uppercase">
+                      Account Name: {activeBusiness.bankAccountName || activeBusiness.name}
+                    </p>
+                  </div>
+                )}
+                {viewingInvoice.notes && (
+                  <div className="text-slate-600">
+                    <p className="font-bold text-slate-800 mb-1">Payment Instructions & Terms:</p>
+                    <p className="whitespace-pre-line">{viewingInvoice.notes}</p>
+                  </div>
+                )}
+              </div>
 
               {/* Footer */}
               <div className="text-center pt-6 border-t border-slate-100 text-[11px] text-slate-400">
